@@ -8,7 +8,7 @@ pub enum TokenKind {
     Comma,
     Str,
     Num,
-    Bool,
+    Literal,
 }
 
 #[derive(Debug, PartialEq)]
