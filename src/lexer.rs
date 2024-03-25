@@ -1,70 +1,127 @@
-use crate::token::{Token, TokenKind::*};
+use crate::token::{Token, TokenType::*};
+use std::process::exit;
 
 pub struct Lexer<'a> {
-    input: &'a str,
-    line: usize,
+    inp: &'a str,
+    pos: usize,
+    lin: usize,
     row: usize,
 }
 
-impl<'a> Lexer<'a> {
-    pub fn lex(input: &'a str) -> Result<Vec<Token>, String> {
-        let mut tokens = Vec::new();
-
-        if input.is_empty() {
-            return Ok(tokens);
-        }
-
-        let mut lexer = Lexer {
-            input,
-            line: 0,
-            row: 0,
-        };
-
-        loop {
-            match lexer.next_token()? {
-                Some(token) => tokens.push(token),
-                None => return Ok(tokens),
-            }
-        }
-    }
-
-    fn next_token(&mut self) -> Result<Option<Token>, String> {
+impl<'a> Iterator for Lexer<'a> {
+    type Item = Token;
+    
+    fn next(&mut self) -> Option<Self::Item> {
         self.skip_whitespace();
 
         let curr = match self.curr() {
             Some(curr) => curr,
-            None => return Ok(None),
+            None => return None,
         };
 
         let token = match curr {
-            '{' => Token::from_args(LBrace, self.line, self.row, 1),
-            '}' => Token::from_args(RBrace, self.line, self.row, 1),
-            '[' => Token::from_args(LBracket, self.line, self.row, 1),
-            ']' => Token::from_args(RBracket, self.line, self.row, 1),
-            ':' => Token::from_args(Colon, self.line, self.row, 1),
-            ',' => Token::from_args(Comma, self.line, self.row, 1),
+            '{' => Token::from_args(LSq, self.pos, 1, self.lin, self.row),
+            '}' => Token::from_args(RSq, self.pos, 1, self.lin, self.row),
+            '[' => Token::from_args(LBr, self.pos, 1, self.lin, self.row),
+            ']' => Token::from_args(RBr, self.pos, 1, self.lin, self.row),
+            ':' => Token::from_args(Col, self.pos, 1, self.lin, self.row),
+            ',' => Token::from_args(Com, self.pos, 1, self.lin, self.row),
             't' | 'f' | 'n' => {
-                return Ok(Some(self.read_literal()));
+                return Some(self.read_literal());
             }
             '"' => {
-                return Ok(Some(self.read_string()));
+                return Some(self.read_string());
             }
-            ch if ch.is_digit(10) || ch == '.' => {
-                return Ok(Some(self.read_number()));
+            ch if ch.is_ascii_digit() || ch == '.' => {
+                return Some(self.read_number());
             }
             ch => {
-                return Err(format!(
-                    "lexer: invalid character {} at {}:{}",
-                    ch, self.line, self.row
-                ))
+                eprintln!(
+                    "invalid character {} at {}:{}",
+                    ch, self.lin, self.row
+                );
+                exit(1);
             }
         };
 
         self.read_char();
-        Ok(Some(token))
+        Some(token)
+       
+    }
+}
+
+impl<'a> Lexer<'a> {
+    pub fn new(input: &'a str) -> Self {
+        Lexer {
+            inp: input,
+            pos: 0,
+            lin: 0,
+            row: 0,
+        }
+    }
+
+    fn curr(&self) -> Option<char> {
+        self.inp.chars().nth(self.pos)
+    }
+
+    fn read_char(&mut self) {
+        match self.curr() {
+            Some('\n') => {
+                self.pos += 1;
+                self.lin += 1;
+                self.row = 0;
+            },
+            Some(_) => {
+                self.pos += 1;
+                self.row += 1;
+            },
+            None => {},
+        }
+    }
+
+    fn skip_whitespace(&mut self) {
+        while let Some(curr) = self.curr() {
+            if curr.is_whitespace() {
+                self.read_char();
+            } else {
+                break;
+            }
+        }
+    }
+
+    fn read_string(&mut self) -> Token {
+        self.read_char();
+        let pos = self.pos;
+        let row = self.row;
+
+        while let Some(curr) = self.curr() {
+            self.read_char();
+
+            if curr == '"' || curr.is_whitespace() {
+                break;
+            }
+        }
+
+        Token::from_args(Str, pos, self.pos - pos - 1, self.lin, row)
+    }
+
+    fn read_number(&mut self) -> Token {
+        let pos = self.pos;
+        let row = self.row;
+
+        while let Some(curr) = self.curr() {
+            if curr.is_ascii_digit() {
+                self.read_char();
+            } else {
+                break;
+            }
+        }
+
+        Token::from_args(Num, pos, self.pos - pos, self.lin, row)
     }
 
     fn read_literal(&mut self) -> Token {
+        let pos = self.pos;
         let row = self.row;
         let mut len = 0;
 
@@ -76,59 +133,16 @@ impl<'a> Lexer<'a> {
             len += 1;
             self.read_char();
         }
-
-        Token::from_args(Literal, self.line, row, len)
-    }
-
-    fn curr(&self) -> Option<char> {
-        self.input
-            .lines()
-            .nth(self.line)
-            .and_then(|line| line.chars().nth(self.row))
-    }
-
-    fn read_char(&mut self) {
-        match self.curr() {
-            Some('\n') => self.line += 1,
-            Some(_) => self.row += 1,
-            None => {},
-        }
-    }
-
-    fn read_string(&mut self) -> Token {
-        self.read_char();
-        let row = self.row;
-
-        while let Some(curr) = self.curr() {
-            self.read_char();
-
-            if curr == '"' || curr.is_whitespace() {
-                break;
+        
+        match &self.inp[pos..pos + len] {
+            "true" | "false" | "null" => {},
+            s => {
+                eprintln!("invalid literal '{}' at position {}:{}", s, self.lin, row);
+                exit(1);
             }
         }
 
-        Token::from_args(Str, self.line, row, self.row - row - 1)
-    }
-
-    fn read_number(&mut self) -> Token {
-        let row = self.row;
-
-        while let Some(curr) = self.curr() {
-            if curr.is_digit(10) {
-                self.read_char();
-            } else {
-                break;
-            }
-        }
-
-        Token::from_args(Num, self.line, row, self.row - row)
-    }
-
-    fn skip_whitespace(&mut self) {
-        match self.curr() {
-            Some(ch) if ch.is_whitespace() => self.read_char(),
-            _ => {}
-        }
+        Token::from_args(Lit, pos, len, self.lin, row)
     }
 }
 
@@ -136,123 +150,124 @@ impl<'a> Lexer<'a> {
 mod tests {
     use super::*;
 
-    fn lex(input: &str) -> Vec<Token> {
-        Lexer::lex(input).unwrap()
+    fn lex(input: &str, expected_tokens: Vec<Token>) {
+        let tokens: Vec<_> = Lexer::new(input).collect();
+        assert_eq!(tokens, expected_tokens, "input: {}", input);
     }
 
     #[test]
     fn number() {
-        assert_eq!(lex("123"), vec![Token::from_args(Num, 0, 0, 3)]);
+        lex("123", vec![Token::from_args(Num, 0, 3, 0, 0)]);
     }
 
     #[test]
     fn str() {
-        assert_eq!(lex("\"hello\""), vec![Token::from_args(Str, 0, 1, 5)]);
+        lex("\"hello\"", vec![Token::from_args(Str, 1, 5, 0, 1)]);
+    }
+
+    #[test]
+    fn one_item() {
+        lex(
+            r#"{ "id": 25 }"#,
+            // 012345678901
+            vec![
+                Token::from_args(LSq, 0, 1, 0, 0),
+                Token::from_args(Str, 3, 2, 0, 3),
+                Token::from_args(Col, 6, 1, 0, 6),
+                Token::from_args(Num, 8, 2, 0, 8),
+                Token::from_args(RSq, 11, 1, 0, 11),
+            ],
+        );
+    }
+
+    #[test]
+    fn two_items() {
+        lex(
+            r#"{ "id": 25, "name": "bob" }"#,
+            // 012345678901234567890123456
+            vec![
+                Token::from_args(LSq, 0, 1, 0, 0),
+                Token::from_args(Str, 3, 2, 0, 3),
+                Token::from_args(Col, 6, 1, 0, 6),
+                Token::from_args(Num, 8, 2, 0, 8),
+                Token::from_args(Com, 10, 1, 0, 10),
+                Token::from_args(Str, 13, 4, 0, 13),
+                Token::from_args(Col, 18, 1, 0, 18),
+                Token::from_args(Str, 21, 3, 0, 21),
+                Token::from_args(RSq, 26, 1, 0, 26),
+            ],
+        );
+    }
+
+    #[test]
+    fn empty_string() {
+        lex(
+            r#"{ "id": "", "name": 23423 }"#,
+            //     012345678901234567890123456
+            vec![
+                Token::from_args(LSq, 0, 1, 0, 0),
+                Token::from_args(Str, 3, 2, 0, 3),
+                Token::from_args(Col, 6, 1, 0, 6),
+                Token::from_args(Str, 9, 0, 0, 9),
+                Token::from_args(Com, 10, 1, 0, 10),
+                Token::from_args(Str, 13, 4, 0, 13),
+                Token::from_args(Col, 18, 1, 0, 18),
+                Token::from_args(Num, 20, 5, 0, 20),
+                Token::from_args(RSq, 26, 1, 0, 26),
+            ],
+        );
     }
 
     #[test]
     fn literal() {
-        assert_eq!(lex("true"), vec![Token::from_args(Literal, 0, 0, 4)]);
-        assert_eq!(lex("false"), vec![Token::from_args(Literal, 0, 0, 5)]);
-        assert_eq!(lex("null"), vec![Token::from_args(Literal, 0, 0, 4)]);
-        assert_eq!(lex("{ \"id\": true }"), vec![
-            //          01 234 567890123
-            Token::from_args(LBrace, 0, 0, 1),
-            Token::from_args(Str, 0, 3, 2),
-            Token::from_args(Colon, 0, 6, 1),
-            Token::from_args(Literal, 0, 8, 4),
-            Token::from_args(RBrace, 0, 13, 1),
+        lex("true", vec![Token::from_args(Lit, 0, 4, 0, 0)]);
+        lex("false", vec![Token::from_args(Lit, 0, 5, 0, 0)]);
+        lex("null", vec![Token::from_args(Lit, 0, 4, 0, 0)]);
+        lex(r#"{ "id": true }"#, vec![
+            // 01234567890123
+            Token::from_args(LSq, 0, 1, 0, 0),
+            Token::from_args(Str, 3, 2, 0, 3),
+            Token::from_args(Col, 6, 1, 0, 6),
+            Token::from_args(Lit, 8, 4, 0, 8),
+            Token::from_args(RSq, 13, 1, 0, 13),
         ]);
-        assert_eq!(lex("{ \"id\": false }"), vec![
-            //          01 234 567890123
-            Token::from_args(LBrace, 0, 0, 1),
-            Token::from_args(Str, 0, 3, 2),
-            Token::from_args(Colon, 0, 6, 1),
-            Token::from_args(Literal, 0, 8, 5),
-            Token::from_args(RBrace, 0, 14, 1),
+        lex(r#"{ "id": false }"#, vec![
+            // 012345678901234
+            Token::from_args(LSq, 0, 1, 0, 0),
+            Token::from_args(Str, 3, 2, 0, 3),
+            Token::from_args(Col, 6, 1, 0, 6),
+            Token::from_args(Lit, 8, 5, 0, 8),
+            Token::from_args(RSq, 14, 1, 0, 14),
         ]);
-        assert_eq!(lex("{ \"id\": null }"), vec![
-            //          01 234 567890123
-            Token::from_args(LBrace, 0, 0, 1),
-            Token::from_args(Str, 0, 3, 2),
-            Token::from_args(Colon, 0, 6, 1),
-            Token::from_args(Literal, 0, 8, 4),
-            Token::from_args(RBrace, 0, 13, 1),
+        lex(r#"{ "id": null }"#, vec![
+            // 01234567890123
+            Token::from_args(LSq, 0, 1, 0, 0),
+            Token::from_args(Str, 3, 2, 0, 3),
+            Token::from_args(Col, 6, 1, 0, 6),
+            Token::from_args(Lit, 8, 4, 0, 8),
+            Token::from_args(RSq, 13, 1, 0, 13),
         ]);
-    }
-
-    #[test]
-    fn one() {
-        assert_eq!(
-            lex(r#"{ "id": 25 }"#),
-            // 012345678901
-            vec![
-                Token::from_args(LBrace, 0, 0, 1),
-                Token::from_args(Str, 0, 3, 2),
-                Token::from_args(Colon, 0, 6, 1),
-                Token::from_args(Num, 0, 8, 2),
-                Token::from_args(RBrace, 0, 11, 1),
-            ],
-        );
-    }
-
-    #[test]
-    fn two() {
-        assert_eq!(
-            lex(r#"{ "id": 25, "name": "bob" }"#),
-            // 012345678901234567890123456
-            vec![
-                Token::from_args(LBrace, 0, 0, 1),
-                Token::from_args(Str, 0, 3, 2),
-                Token::from_args(Colon, 0, 6, 1),
-                Token::from_args(Num, 0, 8, 2),
-                Token::from_args(Comma, 0, 10, 1),
-                Token::from_args(Str, 0, 13, 4),
-                Token::from_args(Colon, 0, 18, 1),
-                Token::from_args(Str, 0, 21, 3),
-                Token::from_args(RBrace, 0, 26, 1),
-            ],
-        );
-    }
-
-    #[test]
-    fn three() {
-        assert_eq!(
-            lex(r#"{ "id": "", "name": 23423 }"#),
-            //     012345678901234567890123456
-            vec![
-                Token::from_args(LBrace, 0, 0, 1),
-                Token::from_args(Str, 0, 3, 2),
-                Token::from_args(Colon, 0, 6, 1),
-                Token::from_args(Str, 0, 9, 0),
-                Token::from_args(Comma, 0, 10, 1),
-                Token::from_args(Str, 0, 13, 4),
-                Token::from_args(Colon, 0, 18, 1),
-                Token::from_args(Num, 0, 20, 5),
-                Token::from_args(RBrace, 0, 26, 1),
-            ],
-        );
     }
 
     #[test]
     fn list() {
-        assert_eq!(
-            lex(r#"{ "id": 25, "users": ["bob", "alice"] }"#),
+        lex(
+            r#"{ "id": 25, "users": ["bob", "alice"] }"#,
             // 012345678901234567890123456789012345678
             vec![
-                Token::from_args(LBrace, 0, 0, 1),
-                Token::from_args(Str, 0, 3, 2),
-                Token::from_args(Colon, 0, 6, 1),
-                Token::from_args(Num, 0, 8, 2),
-                Token::from_args(Comma, 0, 10, 1),
-                Token::from_args(Str, 0, 13, 5),
-                Token::from_args(Colon, 0, 19, 1),
-                Token::from_args(LBracket, 0, 21, 1),
-                Token::from_args(Str, 0, 23, 3),
-                Token::from_args(Comma, 0, 27, 1),
-                Token::from_args(Str, 0, 30, 5),
-                Token::from_args(RBracket, 0, 36, 1),
-                Token::from_args(RBrace, 0, 38, 1),
+                Token::from_args(LSq, 0, 1, 0, 0),
+                Token::from_args(Str, 3, 2, 0, 3),
+                Token::from_args(Col, 6, 1, 0, 6),
+                Token::from_args(Num, 8, 2, 0, 8),
+                Token::from_args(Com, 10, 1, 0, 10),
+                Token::from_args(Str, 13, 5, 0, 13),
+                Token::from_args(Col, 19, 1, 0, 19),
+                Token::from_args(LBr, 21, 1, 0, 21),
+                Token::from_args(Str, 23, 3, 0, 23),
+                Token::from_args(Com, 27, 1, 0, 27),
+                Token::from_args(Str, 30, 5, 0, 30),
+                Token::from_args(RBr, 36, 1, 0, 36),
+                Token::from_args(RSq, 38, 1, 0, 38),
             ],
         );
     }

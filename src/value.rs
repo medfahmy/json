@@ -1,15 +1,21 @@
-use std::collections::HashMap;
-
-pub enum ValueKind {
-    String,
-    Number,
-    List,
-    Object,
+pub enum ValueType {
+    Str,
+    Num,
+    Bool,
+    Null,
+    Lst,
+    Obj,
 }
 
 pub struct Value<'a> {
-    input: &'a str,
-    kind: ValueKind,
-    line: usize,
-    row: usize,
+    inp: &'a str,
+    typ: ValueType,
+    pos: usize,
+    len: usize,
+}
+
+impl<'a> Value<'a> {
+    pub fn from_args(inp: &'a str, typ: ValueType, pos: usize, len: usize) -> Self {
+        Value { inp, typ, pos, len }
+    }
 }
