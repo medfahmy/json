@@ -1,12 +1,12 @@
 use crate::lexer::Lexer;
 use crate::token::{Token, TokenType};
-use crate::value::{Value, ValueType};
+use crate::value::Value;
 
 pub struct Parser<'a> {
     input: &'a str,
     lexer: Lexer<'a>,
-    curr: Option<Token>,
-    peek: Option<Token>,
+    curr: Option<Token<'a>>,
+    peek: Option<Token<'a>>,
 }
 
 impl<'a> Parser<'a> {
@@ -31,14 +31,18 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse(&mut self) -> Result<Value<'a>, String> {
-        while let Some(curr) = self.curr.as_ref() {
+        let value = if let Some(curr) = self.curr.as_ref() {
             match curr.typ {
-                TokenType::LSq => return self.parse_obj(),
+                TokenType::Bool => Value::Bool(curr.val),                
+                TokenType::Null => Value::Bool(curr.val),
+                TokenType::Lsquirly => return self.parse_obj(),
                 _ => todo!(),
             }
-        }
+        } else {
+            Value::Null
+        };
 
-        Ok(Value::from_args(self.input, ValueType::Null, 0, 0))
+        Ok(value)
     }
 
 

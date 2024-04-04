@@ -1,27 +1,27 @@
 #[derive(Debug, PartialEq)]
 pub enum TokenType {
-    LSq,
-    RSq,
-    LBr,
-    RBr,
-    Col,
-    Com,
+    Lsquirly,
+    Rsquirly,
+    Lbrace,
+    Rbrace,
+    Colon,
+    Comma,
     Str,
     Num,
-    Lit,
+    Bool,
+    Null,
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Token {
+pub struct Token<'a> {
     pub typ: TokenType,
-    pub pos: usize,
-    pub len: usize,
-    pub lin: usize,
+    pub val: &'a str,
     pub row: usize,
+    pub col: usize,
 }
 
-impl Token {
-    pub fn from_args(typ: TokenType, pos: usize, len: usize, lin: usize, row: usize) -> Self {
-        Self { typ, pos, lin, row, len }
+impl<'a> Token<'a> {
+    pub fn from_args(typ: TokenType, val: &'a str, row: usize, col: usize) -> Self {
+        Self { typ, val, row, col }
     }
 }

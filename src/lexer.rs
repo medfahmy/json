@@ -1,16 +1,16 @@
-use crate::token::{Token, TokenType::*};
+use crate::token::{Token, TokenType, TokenType::*};
 use std::process::exit;
 
 pub struct Lexer<'a> {
-    inp: &'a str,
+    input: &'a str,
     pos: usize,
-    lin: usize,
     row: usize,
+    col: usize,
 }
 
 impl<'a> Iterator for Lexer<'a> {
-    type Item = Token;
-    
+    type Item = Token<'a>;
+
     fn next(&mut self) -> Option<Self::Item> {
         self.skip_whitespace();
 
@@ -19,13 +19,13 @@ impl<'a> Iterator for Lexer<'a> {
             None => return None,
         };
 
-        let token = match curr {
-            '{' => Token::from_args(LSq, self.pos, 1, self.lin, self.row),
-            '}' => Token::from_args(RSq, self.pos, 1, self.lin, self.row),
-            '[' => Token::from_args(LBr, self.pos, 1, self.lin, self.row),
-            ']' => Token::from_args(RBr, self.pos, 1, self.lin, self.row),
-            ':' => Token::from_args(Col, self.pos, 1, self.lin, self.row),
-            ',' => Token::from_args(Com, self.pos, 1, self.lin, self.row),
+        match curr {
+            '{' => self.symbol(Lsquirly),
+            '}' => self.symbol(Rsquirly),
+            '[' => self.symbol(Lbrace),
+            ']' => self.symbol(Rbrace),
+            ':' => self.symbol(Colon),
+            ',' => self.symbol(Comma),
             't' | 'f' | 'n' => {
                 return Some(self.read_literal());
             }
@@ -36,47 +36,47 @@ impl<'a> Iterator for Lexer<'a> {
                 return Some(self.read_number());
             }
             ch => {
-                eprintln!(
-                    "invalid character {} at {}:{}",
-                    ch, self.lin, self.row
-                );
+                eprintln!("invalid character {} at {}:{}", ch, self.row, self.col);
                 exit(1);
             }
-        };
-
-        self.read_char();
-        Some(token)
-       
+        }
     }
 }
 
 impl<'a> Lexer<'a> {
     pub fn new(input: &'a str) -> Self {
         Lexer {
-            inp: input,
+            input,
             pos: 0,
-            lin: 0,
-            row: 0,
+            col: 1,
+            row: 1,
         }
     }
 
     fn curr(&self) -> Option<char> {
-        self.inp.chars().nth(self.pos)
+        self.input.chars().nth(self.pos)
     }
 
     fn read_char(&mut self) {
         match self.curr() {
             Some('\n') => {
                 self.pos += 1;
-                self.lin += 1;
-                self.row = 0;
-            },
+                self.col = 0;
+                self.row += 1;
+            }
             Some(_) => {
                 self.pos += 1;
-                self.row += 1;
-            },
-            None => {},
+                self.col += 1;
+            }
+            None => {}
         }
+    }
+
+    fn symbol(&mut self, typ: TokenType) -> Option<Token<'a>> {
+        let token = Token::from_args(typ, &self.input[self.pos..self.pos + 1], self.row, self.col);
+        self.read_char();
+
+       Some(token)
     }
 
     fn skip_whitespace(&mut self) {
@@ -89,10 +89,10 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn read_string(&mut self) -> Token {
+    fn read_string(&mut self) -> Token<'a> {
         self.read_char();
         let pos = self.pos;
-        let row = self.row;
+        let col = self.col;
 
         while let Some(curr) = self.curr() {
             self.read_char();
@@ -102,12 +102,12 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        Token::from_args(Str, pos, self.pos - pos - 1, self.lin, row)
+        Token::from_args(Str, &self.input[pos..self.pos - 1], self.row, col)
     }
 
-    fn read_number(&mut self) -> Token {
+    fn read_number(&mut self) -> Token<'a> {
         let pos = self.pos;
-        let row = self.row;
+        let col = self.col;
 
         while let Some(curr) = self.curr() {
             if curr.is_ascii_digit() {
@@ -117,32 +117,35 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        Token::from_args(Num, pos, self.pos - pos, self.lin, row)
+        println!("pos = {}, self.pos = {}", pos, self.pos);
+
+        Token::from_args(Num, &self.input[pos..self.pos], self.row, col)
     }
 
-    fn read_literal(&mut self) -> Token {
+    fn read_literal(&mut self) -> Token<'a> {
         let pos = self.pos;
-        let row = self.row;
-        let mut len = 0;
+        let col = self.col;
 
         while let Some(curr) = self.curr() {
             if !curr.is_alphabetic() {
                 break;
             }
 
-            len += 1;
             self.read_char();
         }
-        
-        match &self.inp[pos..pos + len] {
-            "true" | "false" | "null" => {},
+
+        let lit = &self.input[pos..self.pos];
+
+        self.read_char();
+
+        match lit {
+            "null" => Token::from_args(Null, lit, self.row, col),
+            "true" | "false" => Token::from_args(Bool, lit, self.row, col),
             s => {
-                eprintln!("invalid literal '{}' at position {}:{}", s, self.lin, row);
+                eprintln!("invalid literal '{}' at position {}:{}", s, self.row, col);
                 exit(1);
             }
         }
-
-        Token::from_args(Lit, pos, len, self.lin, row)
     }
 }
 
@@ -156,26 +159,38 @@ mod tests {
     }
 
     #[test]
+    fn symbols() {
+        lex("{}[]:,", vec![
+            Token::from_args(Lsquirly, "{", 1, 1),
+            Token::from_args(Rsquirly, "}", 1, 2),
+            Token::from_args(Lbrace, "[", 1, 3),
+            Token::from_args(Rbrace, "]", 1, 4),
+            Token::from_args(Colon, ":", 1, 5),
+            Token::from_args(Comma, ",", 1, 6),
+        ]);
+    }
+
+    #[test]
     fn number() {
-        lex("123", vec![Token::from_args(Num, 0, 3, 0, 0)]);
+        lex("123", vec![Token::from_args(Num, "123", 1, 1)]);
     }
 
     #[test]
     fn str() {
-        lex("\"hello\"", vec![Token::from_args(Str, 1, 5, 0, 1)]);
+        lex("\"hello\"", vec![Token::from_args(Str, "hello", 1, 2)]);
+        lex("\"world\"", vec![Token::from_args(Str, "world", 1, 2)]);
     }
 
     #[test]
     fn one_item() {
         lex(
             r#"{ "id": 25 }"#,
-            // 012345678901
             vec![
-                Token::from_args(LSq, 0, 1, 0, 0),
-                Token::from_args(Str, 3, 2, 0, 3),
-                Token::from_args(Col, 6, 1, 0, 6),
-                Token::from_args(Num, 8, 2, 0, 8),
-                Token::from_args(RSq, 11, 1, 0, 11),
+                Token::from_args(Lsquirly, "{", 1, 1),
+                Token::from_args(Str, "id", 1, 4),
+                Token::from_args(Colon, ":", 1, 7),
+                Token::from_args(Num, "25", 1, 9),
+                Token::from_args(Rsquirly, "}", 1, 12),
             ],
         );
     }
@@ -184,17 +199,16 @@ mod tests {
     fn two_items() {
         lex(
             r#"{ "id": 25, "name": "bob" }"#,
-            // 012345678901234567890123456
             vec![
-                Token::from_args(LSq, 0, 1, 0, 0),
-                Token::from_args(Str, 3, 2, 0, 3),
-                Token::from_args(Col, 6, 1, 0, 6),
-                Token::from_args(Num, 8, 2, 0, 8),
-                Token::from_args(Com, 10, 1, 0, 10),
-                Token::from_args(Str, 13, 4, 0, 13),
-                Token::from_args(Col, 18, 1, 0, 18),
-                Token::from_args(Str, 21, 3, 0, 21),
-                Token::from_args(RSq, 26, 1, 0, 26),
+                Token::from_args(Lsquirly, "{", 1, 1),
+                Token::from_args(Str, "id", 1, 4),
+                Token::from_args(Colon, ":", 1, 7),
+                Token::from_args(Num, "25", 1, 9),
+                Token::from_args(Comma, ",", 1, 11),
+                Token::from_args(Str, "name", 1, 14),
+                Token::from_args(Colon, ":", 1, 19),
+                Token::from_args(Str, "bob", 1, 22),
+                Token::from_args(Rsquirly, "}", 1, 27),
             ],
         );
     }
@@ -203,71 +217,78 @@ mod tests {
     fn empty_string() {
         lex(
             r#"{ "id": "", "name": 23423 }"#,
-            //     012345678901234567890123456
             vec![
-                Token::from_args(LSq, 0, 1, 0, 0),
-                Token::from_args(Str, 3, 2, 0, 3),
-                Token::from_args(Col, 6, 1, 0, 6),
-                Token::from_args(Str, 9, 0, 0, 9),
-                Token::from_args(Com, 10, 1, 0, 10),
-                Token::from_args(Str, 13, 4, 0, 13),
-                Token::from_args(Col, 18, 1, 0, 18),
-                Token::from_args(Num, 20, 5, 0, 20),
-                Token::from_args(RSq, 26, 1, 0, 26),
+                Token::from_args(Lsquirly, "{", 1, 1),
+                Token::from_args(Str, "id", 1, 4),
+                Token::from_args(Colon, ":", 1, 7),
+                Token::from_args(Str, "", 1, 10),
+                Token::from_args(Comma, ",", 1, 11),
+                Token::from_args(Str, "name", 1, 14),
+                Token::from_args(Colon, ":", 1, 19),
+                Token::from_args(Num, "23423", 1, 21),
+                Token::from_args(Rsquirly, "}", 1, 27),
             ],
         );
     }
 
     #[test]
     fn literal() {
-        lex("true", vec![Token::from_args(Lit, 0, 4, 0, 0)]);
-        lex("false", vec![Token::from_args(Lit, 0, 5, 0, 0)]);
-        lex("null", vec![Token::from_args(Lit, 0, 4, 0, 0)]);
-        lex(r#"{ "id": true }"#, vec![
-            // 01234567890123
-            Token::from_args(LSq, 0, 1, 0, 0),
-            Token::from_args(Str, 3, 2, 0, 3),
-            Token::from_args(Col, 6, 1, 0, 6),
-            Token::from_args(Lit, 8, 4, 0, 8),
-            Token::from_args(RSq, 13, 1, 0, 13),
-        ]);
-        lex(r#"{ "id": false }"#, vec![
-            // 012345678901234
-            Token::from_args(LSq, 0, 1, 0, 0),
-            Token::from_args(Str, 3, 2, 0, 3),
-            Token::from_args(Col, 6, 1, 0, 6),
-            Token::from_args(Lit, 8, 5, 0, 8),
-            Token::from_args(RSq, 14, 1, 0, 14),
-        ]);
-        lex(r#"{ "id": null }"#, vec![
-            // 01234567890123
-            Token::from_args(LSq, 0, 1, 0, 0),
-            Token::from_args(Str, 3, 2, 0, 3),
-            Token::from_args(Col, 6, 1, 0, 6),
-            Token::from_args(Lit, 8, 4, 0, 8),
-            Token::from_args(RSq, 13, 1, 0, 13),
-        ]);
+        lex("true", vec![Token::from_args(Bool, "true", 1, 1)]);
+        lex("false", vec![Token::from_args(Bool, "false", 1, 1)]);
+        lex("null", vec![Token::from_args(Null, "null", 1, 1)]);
+
+        lex(
+            r#"{ "id": true }"#,
+            vec![
+                Token::from_args(Lsquirly, "{", 1, 1),
+                Token::from_args(Str, "id", 1, 4),
+                Token::from_args(Colon, ":", 1, 7),
+                Token::from_args(Bool, "true", 1, 9),
+                Token::from_args(Rsquirly, "}", 1, 14),
+            ],
+        );
+
+        lex(
+            r#"{ "id": false }"#,
+            vec![
+                Token::from_args(Lsquirly, "{", 1, 1),
+                Token::from_args(Str, "id", 1, 4),
+                Token::from_args(Colon, ":", 1, 7),
+                Token::from_args(Bool, "false", 1, 9),
+                Token::from_args(Rsquirly, "}", 1, 15),
+            ],
+        );
+
+        lex(
+            r#"{ "id": null }"#,
+            vec![
+                Token::from_args(Lsquirly, "{", 1, 1),
+                Token::from_args(Str, "id", 1, 4),
+                Token::from_args(Colon, ":", 1, 7),
+                Token::from_args(Null, "null", 1, 9),
+                Token::from_args(Rsquirly, "}", 1, 14),
+            ],
+        );
     }
 
     #[test]
     fn list() {
         lex(
             r#"{ "id": 25, "users": ["bob", "alice"] }"#,
-            // 012345678901234567890123456789012345678
             vec![
-                Token::from_args(LSq, 0, 1, 0, 0),
-                Token::from_args(Str, 3, 2, 0, 3),
-                Token::from_args(Col, 6, 1, 0, 6),
-                Token::from_args(Num, 8, 2, 0, 8),
-                Token::from_args(Com, 10, 1, 0, 10),
-                Token::from_args(Str, 13, 5, 0, 13),
-                Token::from_args(Col, 19, 1, 0, 19),
-                Token::from_args(LBr, 21, 1, 0, 21),
-                Token::from_args(Str, 23, 3, 0, 23),
-                Token::from_args(Com, 27, 1, 0, 27),
-                Token::from_args(Str, 30, 5, 0, 30),
-                Token::from_args(RBr, 36, 1, 0, 36),
-                Token::from_args(RSq, 38, 1, 0, 38),
+                Token::from_args(Lsquirly, "{", 1, 1),
+                Token::from_args(Str, "id", 1, 4),
+                Token::from_args(Colon, ":", 1, 7),
+                Token::from_args(Num, "25", 1, 9),
+                Token::from_args(Comma, ",", 1, 11),
+                Token::from_args(Str, "users", 1, 14),
+                Token::from_args(Colon, ":", 1, 20),
+                Token::from_args(Lbrace, "[", 1, 22),
+                Token::from_args(Str, "bob", 1, 24),
+                Token::from_args(Comma, ",", 1, 28),
+                Token::from_args(Str, "alice", 1, 31),
+                Token::from_args(Rbrace, "]", 1, 37),
+                Token::from_args(Rsquirly, "}", 1, 39),
             ],
         );
     }

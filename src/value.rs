@@ -1,26 +1,18 @@
 use std::fmt::Display;
+use std::collections::HashMap;
 
-pub enum ValueType {
-    Str,
-    Num,
-    Bool,
+pub enum Value<'a> {
     Null,
-    Lst,
-    Obj,
+    Str(&'a str),
+    Num(&'a str),
+    Bool(&'a str),
+    List { slice: &'a str, items: Vec<&'a str> },
+    Obj { slice: &'a str, map: HashMap<&'a str, &'a str> },
 }
 
-pub struct Value<'a> {
-    inp: &'a str,
-    typ: ValueType,
-    pos: usize,
-    len: usize,
-}
+use Value::*;
 
 impl<'a> Value<'a> {
-    pub fn from_args(inp: &'a str, typ: ValueType, pos: usize, len: usize) -> Self {
-        Value { inp, typ, pos, len }
-    }
-
     pub fn query(&self, query: String) -> Self {
         todo!()
     }
@@ -28,7 +20,15 @@ impl<'a> Value<'a> {
 
 impl Display for Value<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let o = self.inp[self.pos..self.pos + self.len].to_string();
-        writeln!(f, "{}", o)
+        let output = match self {
+            Null => "null",
+            Str(s) => s,
+            Num(s) => s,
+            Bool(s) => s,
+            List { slice, .. } => slice,
+            Obj { slice, .. } => slice,
+        };
+
+        writeln!(f, "{}", output)
     }
 }
