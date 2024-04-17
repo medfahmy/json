@@ -2,10 +2,10 @@ use crate::token::{Token, TokenType, TokenType::*};
 use std::process::exit;
 
 pub struct Lexer<'a> {
-    input: &'a str,
-    pos: usize,
-    row: usize,
-    col: usize,
+    pub input: &'a str,
+    pub pos: usize,
+    pub row: usize,
+    pub col: usize,
 }
 
 impl<'a> Iterator for Lexer<'a> {
@@ -26,15 +26,9 @@ impl<'a> Iterator for Lexer<'a> {
             ']' => self.symbol(Rbrace),
             ':' => self.symbol(Colon),
             ',' => self.symbol(Comma),
-            't' | 'f' | 'n' => {
-                return Some(self.read_literal());
-            }
-            '"' => {
-                return Some(self.read_string());
-            }
-            ch if ch.is_ascii_digit() || ch == '.' => {
-                return Some(self.read_number());
-            }
+            't' | 'f' | 'n' => Some(self.read_literal()),
+            '"' => Some(self.read_string()),
+            ch if ch.is_ascii_digit() || ch == '.' => Some(self.read_number()),
             ch => {
                 eprintln!("invalid character {} at {}:{}", ch, self.row, self.col);
                 exit(1);
@@ -117,8 +111,6 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        println!("pos = {}, self.pos = {}", pos, self.pos);
-
         Token::from_args(Num, &self.input[pos..self.pos], self.row, col)
     }
 
@@ -136,7 +128,7 @@ impl<'a> Lexer<'a> {
 
         let lit = &self.input[pos..self.pos];
 
-        self.read_char();
+        // self.read_char();
 
         match lit {
             "null" => Token::from_args(Null, lit, self.row, col),
@@ -185,6 +177,7 @@ mod tests {
     fn one_item() {
         lex(
             r#"{ "id": 25 }"#,
+            // 123456789012345678
             vec![
                 Token::from_args(Lsquirly, "{", 1, 1),
                 Token::from_args(Str, "id", 1, 4),
@@ -272,7 +265,7 @@ mod tests {
     }
 
     #[test]
-    fn list() {
+    fn llist() {
         lex(
             r#"{ "id": 25, "users": ["bob", "alice"] }"#,
             vec![
@@ -289,6 +282,30 @@ mod tests {
                 Token::from_args(Str, "alice", 1, 31),
                 Token::from_args(Rbrace, "]", 1, 37),
                 Token::from_args(Rsquirly, "}", 1, 39),
+            ],
+        );
+    }
+
+    #[test]
+    fn lobj() {
+        lex(
+            r#"{ "a": false, "b": 2, "c": null }"#,
+          //   123456789012345678901234567890123456789
+
+            vec![
+                Token::from_args(Lsquirly, "{", 1, 1),
+                Token::from_args(Str, "a", 1, 4),
+                Token::from_args(Colon, ":", 1, 6),
+                Token::from_args(Bool, "false", 1, 8),
+                Token::from_args(Comma, ",", 1, 13),
+                Token::from_args(Str, "b", 1, 16),
+                Token::from_args(Colon, ":", 1, 18),
+                Token::from_args(Num, "2", 1, 20),
+                Token::from_args(Comma, ",", 1, 21),
+                Token::from_args(Str, "c", 1, 24),
+                Token::from_args(Colon, ":", 1, 26),
+                Token::from_args(Null, "null", 1, 28),
+                Token::from_args(Rsquirly, "}", 1, 33),
             ],
         );
     }
