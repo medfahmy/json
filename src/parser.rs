@@ -1,8 +1,7 @@
-use std::collections::HashMap;
-
 use crate::lexer::Lexer;
 use crate::token::{Token, TokenType};
 use crate::value::Value;
+use std::collections::HashMap;
 
 pub struct Parser<'a> {
     lexer: Lexer<'a>,
@@ -70,7 +69,7 @@ impl<'a> Parser<'a> {
                 }
             }
         }
-        
+
         Value::Obj {
             slice: &self.lexer.input[pos..self.lexer.pos],
             map,

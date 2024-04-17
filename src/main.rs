@@ -1,5 +1,5 @@
-use std::io::{stdin, stdout, Write};
 use json::Parser;
+use std::io::{stdin, stdout, Write};
 
 fn main() {
     let stdin = stdin();

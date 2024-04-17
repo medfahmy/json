@@ -1,11 +1,17 @@
-use std::fmt::Display;
 use std::collections::HashMap;
+use std::fmt::Display;
 
 #[derive(Debug, PartialEq)]
 pub enum Value<'a> {
     Literal(&'a str),
-    List { slice: &'a str, items: Vec<Value<'a>> },
-    Obj { slice: &'a str, map: HashMap<&'a str, Value<'a>> },
+    List {
+        slice: &'a str,
+        items: Vec<Value<'a>>,
+    },
+    Obj {
+        slice: &'a str,
+        map: HashMap<&'a str, Value<'a>>,
+    },
 }
 
 use Value::*;

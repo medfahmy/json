@@ -30,7 +30,10 @@ impl<'a> Iterator for Lexer<'a> {
             '"' => Some(self.read_string()),
             ch if ch.is_ascii_digit() || ch == '.' => Some(self.read_number()),
             ch => {
-                self.error(format!("invalid character {} at {}:{}", ch, self.row, self.col));
+                self.error(format!(
+                    "invalid character {} at {}:{}",
+                    ch, self.row, self.col
+                ));
             }
         }
     }
@@ -74,7 +77,7 @@ impl<'a> Lexer<'a> {
         let token = Token::from_args(typ, &self.input[self.pos..self.pos + 1], self.row, self.col);
         self.read_char();
 
-       Some(token)
+        Some(token)
     }
 
     fn skip_whitespace(&mut self) {
@@ -100,7 +103,12 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        Token::from_args(TokenType::String, &self.input[pos..self.pos - 1], self.row, col)
+        Token::from_args(
+            TokenType::String,
+            &self.input[pos..self.pos - 1],
+            self.row,
+            col,
+        )
     }
 
     fn read_number(&mut self) -> Token<'a> {
@@ -138,7 +146,10 @@ impl<'a> Lexer<'a> {
             "null" => Token::from_args(TokenType::Literal, lit, self.row, col),
             "true" | "false" => Token::from_args(TokenType::Literal, lit, self.row, col),
             s => {
-                self.error(format!("invalid literal '{}' at position {}:{}", s, self.row, col));
+                self.error(format!(
+                    "invalid literal '{}' at position {}:{}",
+                    s, self.row, col
+                ));
             }
         }
     }
@@ -156,14 +167,17 @@ mod tests {
 
     #[test]
     fn symbols() {
-        lex("{}[]:,", vec![
-            Token::from_args(Lsquirly, "{", 1, 1),
-            Token::from_args(Rsquirly, "}", 1, 2),
-            Token::from_args(Lbrace, "[", 1, 3),
-            Token::from_args(Rbrace, "]", 1, 4),
-            Token::from_args(Colon, ":", 1, 5),
-            Token::from_args(Comma, ",", 1, 6),
-        ]);
+        lex(
+            "{}[]:,",
+            vec![
+                Token::from_args(Lsquirly, "{", 1, 1),
+                Token::from_args(Rsquirly, "}", 1, 2),
+                Token::from_args(Lbrace, "[", 1, 3),
+                Token::from_args(Rbrace, "]", 1, 4),
+                Token::from_args(Colon, ":", 1, 5),
+                Token::from_args(Comma, ",", 1, 6),
+            ],
+        );
     }
 
     #[test]
@@ -294,8 +308,7 @@ mod tests {
     fn lobj() {
         lex(
             r#"{ "a": false, "b": 2, "c": null }"#,
-          //   123456789012345678901234567890123456789
-
+            //   123456789012345678901234567890123456789
             vec![
                 Token::from_args(Lsquirly, "{", 1, 1),
                 Token::from_args(String, "a", 1, 4),
