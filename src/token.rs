@@ -6,10 +6,9 @@ pub enum TokenType {
     Rbrace,
     Colon,
     Comma,
-    Str,
-    Num,
-    Bool,
-    Null,
+    String,
+    Number,
+    Literal,
 }
 
 #[derive(Debug, PartialEq)]

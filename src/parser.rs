@@ -27,32 +27,27 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse(&mut self) -> Value<'a> {
-        let value = if let Some(curr) = self.curr.as_ref() {
+        if let Some(curr) = self.curr.as_ref() {
             match curr.typ {
-                TokenType::Null | TokenType::Bool | TokenType::Str | TokenType::Num => {
-                    Value::Primitive(curr.val)
+                TokenType::Literal | TokenType::String | TokenType::Number => {
+                    Value::Literal(curr.val)
                 }
                 TokenType::Lsquirly => self.parse_obj(),
                 TokenType::Lbrace => self.parse_list(),
-                _ => todo!(),
+                _ => unreachable!(),
             }
         } else {
-            Value::Primitive("null")
-        };
-
-        value
+            Value::Literal("null")
+        }
     }
 
     fn parse_obj(&mut self) -> Value<'a> {
         let mut map = HashMap::new();
-
         let pos = self.lexer.pos - 1;
-
         self.next_token();
 
         while self.curr.is_some() {
             let key = self.curr.as_ref().unwrap().val;
-
             self.next_token();
 
             if let Some(curr) = &self.curr {
@@ -64,9 +59,7 @@ impl<'a> Parser<'a> {
             }
 
             let value = self.parse();
-
             map.insert(key, value);
-
             self.next_token();
 
             if let Some(curr) = &self.curr {
@@ -86,7 +79,6 @@ impl<'a> Parser<'a> {
 
     fn parse_list(&mut self) -> Value<'a> {
         let mut items = Vec::new();
-
         let pos = self.lexer.pos - 1;
         self.next_token();
 
@@ -123,11 +115,11 @@ mod tests {
 
     #[test]
     fn primitives() {
-        assert_eq!(parse("123"), Value::Primitive("123"));
-        assert_eq!(parse("\"123\""), Value::Primitive("123"));
-        assert_eq!(parse("false"), Value::Primitive("false"));
-        assert_eq!(parse("true"), Value::Primitive("true"));
-        assert_eq!(parse("null"), Value::Primitive("null"));
+        assert_eq!(parse("123"), Value::Literal("123"));
+        assert_eq!(parse("\"123\""), Value::Literal("123"));
+        assert_eq!(parse("false"), Value::Literal("false"));
+        assert_eq!(parse("true"), Value::Literal("true"));
+        assert_eq!(parse("null"), Value::Literal("null"));
     }
 
     #[test]
@@ -137,9 +129,9 @@ mod tests {
             Value::List {
                 slice: "[1, 2, 3]",
                 items: vec![
-                    Value::Primitive("1"),
-                    Value::Primitive("2"),
-                    Value::Primitive("3")
+                    Value::Literal("1"),
+                    Value::Literal("2"),
+                    Value::Literal("3")
                 ]
             }
         );
@@ -152,9 +144,9 @@ mod tests {
             Value::Obj {
                 slice: "{ \"a\": false, \"b\": 2, \"c\": null }",
                 map: vec![
-                    ("a", Value::Primitive("false")),
-                    ("b", Value::Primitive("2")),
-                    ("c", Value::Primitive("null")),
+                    ("a", Value::Literal("false")),
+                    ("b", Value::Literal("2")),
+                    ("c", Value::Literal("null")),
                 ]
                 .into_iter()
                 .collect()
